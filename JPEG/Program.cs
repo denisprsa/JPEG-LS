@@ -44,7 +44,5 @@ namespace JPEG
 
             //Console.ReadKey();
         }
-
-    }
     }
 }

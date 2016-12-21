@@ -19,7 +19,10 @@ namespace JPEG
         private int N_MAX;
         private int C_MIN;
         private int C_MAX;
-        private int computeContext;
+        private int contextOfX;
+        private int Px;
+        private int Rx;
+        private int SIGN;
 
         private int[] N;
         private int[] A;
@@ -94,6 +97,7 @@ namespace JPEG
             this.LIMIT = 2 * (bpp + bpp);
             this.qbpp = (int)Math.Log(this.RANGE, 2);
             this.bpp = 8;
+            this.SIGN = 0;
             this.T = new int[] {3, 7, 12};
             this.D = new int[] { 0, 0, 0 };
             this.Q = new int[] { 0, 0, 0 };
@@ -194,6 +198,8 @@ namespace JPEG
                 this.d = this.LD[(posY - 1) * width - 1];
             else
                 this.d = this.LD[((posY - 1) * width) + posX + 1];
+
+            this.x = this.LD[(posY) * width + posX];
         }
 
         /**
@@ -243,11 +249,16 @@ namespace JPEG
             }
         }
 
+        /**
+         *  QUANTIZATION OF GRADIENTS
+         * 
+         * 
+         */
         private void Quantize(int i)
         {
             this.GetQuantizationGradients();
 
-            int sx = 1;
+            SIGN = 1;
 
             if(Q[0] < 0 || (Q[0] == 0 && Q[1] < 0) ||
                 (Q[0] == 0 && Q[1] == 0 && Q[2] < 0))
@@ -255,18 +266,88 @@ namespace JPEG
                 Q[0] *= -1;
                 Q[1] *= -1;
                 Q[2] *= -1;
-                sx = -1;
+                SIGN = -1;
             }
 
-            computeContext = 81 * Q[0] + 9 * Q[1] + Q[2];
+            contextOfX = 81 * Q[0] + 9 * Q[1] + Q[2];
         }
 
-        private void ModRange(int i)
+        /**
+         *  EDGE-DETECTING PREDICTOR
+         * 
+         * 
+         */
+        private void PredictionPx()
         {
-
+            if (c >= max(a, b))
+            {
+                Px = min(a, b);
+            }
+            else
+            {
+                if (c <= min(a, b))
+                    Px = max(a, b);
+                else
+                    Px = a + b - c;
+            }
         }
 
+        /**
+         *  PREDICTION CORRECTION FROM THE BIAS
+         * 
+         * 
+         */
+        private void PredictionCorrect()
+        {
+            if (SIGN == 1)
+                Px = Px - C[contextOfX];
+            else
+                Px = Px - C[contextOfX];
+
+            if (Px > MAXVAL)
+                Px = MAXVAL;
+            else if (Px < 0)
+                Px = 0;
+        }
+
+
+        /**
+         *  COMPUTATION OF PREDICTION ERROR 
+         * 
+         * 
+         */
         private void ComputeRx()
+        {
+            int errval = x - Px;
+            if (SIGN == -1)
+                errval *= -1;
+
+            if(NEAR == 0)
+            {
+                Rx = x;
+            }
+            else
+            {
+                if (errval > 0)
+                    errval = (errval + NEAR) / (2 * NEAR + 1);
+                else
+                    errval = -(NEAR - errval) / (2 * NEAR + 1);
+
+                Rx = Px + SIGN * errval * (2 * NEAR + 1);
+
+                if (Rx < 0)
+                    Rx = 0;
+                else if (Rx > MAXVAL)
+                    Rx = MAXVAL;
+            }
+        } 
+
+        /**
+         * 
+         * 
+         * 
+         */
+        private void ModRange(int i)
         {
 
         }
