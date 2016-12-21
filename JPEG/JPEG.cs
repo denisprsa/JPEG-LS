@@ -19,6 +19,7 @@ namespace JPEG
         private int N_MAX;
         private int C_MIN;
         private int C_MAX;
+        private int computeContext;
 
         private int[] N;
         private int[] A;
@@ -32,15 +33,9 @@ namespace JPEG
         private int d;
         private int x;
 
-        private int D1;
-        private int D2;
-        private int D3;
-        private int T1;
-        private int T2;
-        private int T3;
-        private int Q1;
-        private int Q2;
-        private int Q3;
+        private int[] D;
+        private int[] T;
+        private int[] Q;
 
         // IMAGE
         private int posX = 0;
@@ -68,8 +63,9 @@ namespace JPEG
          * 
          * 
          */
-        private void init()
+        private void init(int near)
         {
+            this.NEAR = near;
             this.C_MAX = 127;
             this.C_MIN = -128;
             this.N = new int[367];
@@ -98,9 +94,9 @@ namespace JPEG
             this.LIMIT = 2 * (bpp + bpp);
             this.qbpp = (int)Math.Log(this.RANGE, 2);
             this.bpp = 8;
-            this.T1 = 3;
-            this.T2 = 7;
-            this.T3 = 21;
+            this.T = new int[] {3, 7, 12};
+            this.D = new int[] { 0, 0, 0 };
+            this.Q = new int[] { 0, 0, 0 };
 
             this.GetNextSample();
         }
@@ -115,10 +111,10 @@ namespace JPEG
         public byte[] Encode(string image, int n = 0)
         {
             this.image = new Bitmap(image);
-            this.init();
+            this.init(n);
 
             this.GetNextSample();
-            if (this.D1 == 0 && this.D2 == 0 && this.D3 == 0)
+            if (this.D[0] == 0 && this.D[1] == 0 && this.D[2] == 0)
                 this.RunModeProcessing();
             else
                 this.RegularModeProcessing();
@@ -205,32 +201,20 @@ namespace JPEG
          * 
          *  
          */
-        private void QuantizationOfGradients()
+        private void GetQuantizationGradients()
         {
-            int[] Qi = new int[3];
             for(int i = 0; i < 3; i++)
             {
-                int Di = 0;
-                if (i == 0)
-                    Di = D1;
-                else if (i == 1)
-                    Di = D2;
-                else
-                    Di = D3;
-
-                if (Di <= -T3) Qi[i] = -4;
-                else if (Di <= -T2) Qi[i] = -3;
-                else if (Di <= -T1) Qi[i] = -2;
-                else if (Di < -NEAR) Qi[i] = -1;
-                else if (Di <= NEAR) Qi[i] = 0;
-                else if (Di < T1) Qi[i] = 1;
-                else if (Di < T2) Qi[i] = 2;
-                else if (Di < T3) Qi[i] = 3;
-                else Qi[i] = 4;
+                if (D[i] <= -T[2]) Q[i] = -4;
+                else if (D[i] <= -T[1]) Q[i] = -3;
+                else if (D[i] <= -T[0]) Q[i] = -2;
+                else if (D[i] < -NEAR) Q[i] = -1;
+                else if (D[i] <= NEAR) Q[i] = 0;
+                else if (D[i] < T[0]) Q[i] = 1;
+                else if (D[i] < T[1]) Q[i] = 2;
+                else if (D[i] < T[2]) Q[i] = 3;
+                else Q[i] = 4;
             }
-            Q1 = Qi[0];
-            Q2 = Qi[1];
-            Q3 = Qi[2];
         }
 
         private void RegularModeProcessing()
@@ -238,17 +222,43 @@ namespace JPEG
             
         }
 
+        /**
+         *  GET NEXT SAMPLE OF IMAGE
+         * 
+         *
+         */
         private void GetNextSample()
         {
             this.SetVariablesABCD();
-            this.D1 = this.d - this.b;
-            this.D2 = this.b - this.c;
-            this.D3 = this.c - this.a;
+            this.D[0] = this.d - this.b;
+            this.D[1] = this.b - this.c;
+            this.D[2] = this.c - this.a;
+
+            posX += 1;
+
+            if (posX == width)
+            {
+                posX = 0;
+                posY += 1;
+            }
         }
 
         private void Quantize(int i)
         {
+            this.GetQuantizationGradients();
 
+            int sx = 1;
+
+            if(Q[0] < 0 || (Q[0] == 0 && Q[1] < 0) ||
+                (Q[0] == 0 && Q[1] == 0 && Q[2] < 0))
+            {
+                Q[0] *= -1;
+                Q[1] *= -1;
+                Q[2] *= -1;
+                sx = -1;
+            }
+
+            computeContext = 81 * Q[0] + 9 * Q[1] + Q[2];
         }
 
         private void ModRange(int i)
