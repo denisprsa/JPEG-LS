@@ -38,6 +38,9 @@ namespace JPEG
         private int T1;
         private int T2;
         private int T3;
+        private int Q1;
+        private int Q2;
+        private int Q3;
 
         // IMAGE
         private int posX = 0;
@@ -76,7 +79,6 @@ namespace JPEG
             this.Populate(this.N, 1);
             this.Populate(this.B, 0);
             this.Populate(this.C, 0);
-            //  PO ENCABI DOBIMO 4
             this.Populate(this.A, 4);
             this.N[365] = 0;
             this.N[366] = 0;
@@ -95,8 +97,10 @@ namespace JPEG
             this.MAXVAL = 255;
             this.LIMIT = 2 * (bpp + bpp);
             this.qbpp = (int)Math.Log(this.RANGE, 2);
-            // max(2, 8) -> nas primer
             this.bpp = 8;
+            this.T1 = 3;
+            this.T2 = 7;
+            this.T3 = 21;
 
             this.GetNextSample();
         }
@@ -113,14 +117,11 @@ namespace JPEG
             this.image = new Bitmap(image);
             this.init();
 
+            this.GetNextSample();
             if (this.D1 == 0 && this.D2 == 0 && this.D3 == 0)
-            {
                 this.RunModeProcessing();
-            }
             else
-            {
                 this.RegularModeProcessing();
-            }
 
             return new byte[1];
         }
@@ -199,14 +200,50 @@ namespace JPEG
                 this.d = this.LD[((posY - 1) * width) + posX + 1];
         }
 
+        /**
+         *  CALCULATE QUANTIZATION GRADIENTS
+         * 
+         *  
+         */
+        private void QuantizationOfGradients()
+        {
+            int[] Qi = new int[3];
+            for(int i = 0; i < 3; i++)
+            {
+                int Di = 0;
+                if (i == 0)
+                    Di = D1;
+                else if (i == 1)
+                    Di = D2;
+                else
+                    Di = D3;
+
+                if (Di <= -T3) Qi[i] = -4;
+                else if (Di <= -T2) Qi[i] = -3;
+                else if (Di <= -T1) Qi[i] = -2;
+                else if (Di < -NEAR) Qi[i] = -1;
+                else if (Di <= NEAR) Qi[i] = 0;
+                else if (Di < T1) Qi[i] = 1;
+                else if (Di < T2) Qi[i] = 2;
+                else if (Di < T3) Qi[i] = 3;
+                else Qi[i] = 4;
+            }
+            Q1 = Qi[0];
+            Q2 = Qi[1];
+            Q3 = Qi[2];
+        }
+
         private void RegularModeProcessing()
         {
-
+            
         }
 
         private void GetNextSample()
         {
-            
+            this.SetVariablesABCD();
+            this.D1 = this.d - this.b;
+            this.D2 = this.b - this.c;
+            this.D3 = this.c - this.a;
         }
 
         private void Quantize(int i)
