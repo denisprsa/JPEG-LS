@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace JPEG
 {
-    public class JPEG
+    public class JPEGEncode
     {
         private int NEAR;
         private int MAXVAL;
@@ -48,18 +48,6 @@ namespace JPEG
         private int width;
         private int height;
         private byte[] LD;
-
-
-        /**
-         *  NAPOLNIMO ARRAY Z DOLOCENIMI VREDNOSTMI
-         * 
-         * 
-         */
-        private void Populate(int[] arr, int value)
-        {
-            for (int i = 0; i < arr.Length; i++)
-                arr[i] = value;
-        }
 
         /**
          *  INIT DATA
@@ -117,37 +105,16 @@ namespace JPEG
             this.image = new Bitmap(image);
             this.init(n);
 
-            this.GetNextSample();
-            if (this.D[0] == 0 && this.D[1] == 0 && this.D[2] == 0)
-                this.RunModeProcessing();
-            else
-                this.RegularModeProcessing();
+            while (posX * posY == (width - 1) * (height - 1))
+            {
+                this.GetNextSample();
+                if (this.D[0] == 0 && this.D[1] == 0 && this.D[2] == 0)
+                    this.RunModeProcessing();
+                else
+                    this.RegularModeProcessing();
+            }
 
             return new byte[1];
-        }
-
-        /**
-         *  RETURN MAX VALUE BETWEEN TWO VALUES
-         * 
-         *  @i      : int
-         *  @j      : int
-         *  @return : int
-         */
-        private int max(int i, int j)
-        {
-            return (i < j) ? j : i;
-        }
-
-        /**
-         *  RETURN MIN VALUE BETWEEN TWO VALUES
-         * 
-         *  @i      : int
-         *  @j      : int
-         *  @return : int
-         */
-        private int min(int i, int j)
-        {
-            return (i < j) ? i : j;
         }
 
         /**
@@ -157,7 +124,42 @@ namespace JPEG
          */
         private void RunModeProcessing()
         {
-            
+            this.Quantize();
+            this.PredictionPx();
+            this.PredictionCorrect();
+            this.ComputeRx();
+        }
+
+
+        /**
+         *  REGULAR MODE
+         * 
+         * 
+         */
+        private void RegularModeProcessing()
+        {
+
+        }
+        
+        /**
+         *  GET NEXT SAMPLE OF IMAGE
+         * 
+         *
+         */
+        private void GetNextSample()
+        {
+            this.SetVariablesABCD();
+            this.D[0] = this.d - this.b;
+            this.D[1] = this.b - this.c;
+            this.D[2] = this.c - this.a;
+
+            posX += 1;
+
+            if (posX == width)
+            {
+                posX = 0;
+                posY += 1;
+            }
         }
 
         /**
@@ -223,38 +225,12 @@ namespace JPEG
             }
         }
 
-        private void RegularModeProcessing()
-        {
-            
-        }
-
-        /**
-         *  GET NEXT SAMPLE OF IMAGE
-         * 
-         *
-         */
-        private void GetNextSample()
-        {
-            this.SetVariablesABCD();
-            this.D[0] = this.d - this.b;
-            this.D[1] = this.b - this.c;
-            this.D[2] = this.c - this.a;
-
-            posX += 1;
-
-            if (posX == width)
-            {
-                posX = 0;
-                posY += 1;
-            }
-        }
-
         /**
          *  QUANTIZATION OF GRADIENTS
          * 
          * 
          */
-        private void Quantize(int i)
+        private void Quantize()
         {
             this.GetQuantizationGradients();
 
@@ -340,16 +316,51 @@ namespace JPEG
                 else if (Rx > MAXVAL)
                     Rx = MAXVAL;
             }
-        } 
+
+            if (errval < 0)
+                errval = errval + RANGE;
+            if(errval >= (RANGE + 1) / 2)
+                errval = errval - RANGE;
+
+            for(int k = 0; (N[contextOfX] << k) < A[contextOfX]; k++)
+            {
+                k = Math.Log(A[contextOfX] / N[contextOfX], 2);
+            }
+        }
 
         /**
+        *  RETURN MAX VALUE BETWEEN TWO VALUES
+        * 
+        *  @i      : int
+        *  @j      : int
+        *  @return : int
+        */
+        private int max(int i, int j)
+        {
+            return (i < j) ? j : i;
+        }
+
+        /**
+         *  RETURN MIN VALUE BETWEEN TWO VALUES
          * 
+         *  @i      : int
+         *  @j      : int
+         *  @return : int
+         */
+        private int min(int i, int j)
+        {
+            return (i < j) ? i : j;
+        }
+
+        /**
+         *  NAPOLNIMO ARRAY Z DOLOCENIMI VREDNOSTMI
          * 
          * 
          */
-        private void ModRange(int i)
+        private void Populate(int[] arr, int value)
         {
-
+            for (int i = 0; i < arr.Length; i++)
+                arr[i] = value;
         }
     }
 }

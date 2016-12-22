@@ -15,7 +15,7 @@ namespace JPEG
             {
                 if (args[0] == "-E" && args.Length == 4)
                 {
-                    JPEG jpg = new JPEG();
+                    JPEGEncode jpg = new JPEGEncode();
                     byte[] encodedData = jpg.Encode(args[2], Convert.ToInt32(args[1].Substring(1, args[1].Length - 1)));
 
                     BinaryWriter write = new BinaryWriter(File.Open(args[3], FileMode.OpenOrCreate));
@@ -24,7 +24,6 @@ namespace JPEG
                 }
                 else if (args[0] == "-D")
                 {
-                    JPEG jpg = new JPEG();
                     long length = new FileInfo(args[1]).Length;
                     BinaryReader reader = new BinaryReader(File.Open(args[1], FileMode.Open));
                     byte[] data = new byte[length];
