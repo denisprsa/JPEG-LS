@@ -324,7 +324,7 @@ namespace JPEG
 
             for(int k = 0; (N[contextOfX] << k) < A[contextOfX]; k++)
             {
-                k = Math.Log(A[contextOfX] / N[contextOfX], 2);
+                k = (int)(Math.Log(A[contextOfX] / N[contextOfX], 2));
             }
         }
 
@@ -355,7 +355,9 @@ namespace JPEG
         /**
          *  NAPOLNIMO ARRAY Z DOLOCENIMI VREDNOSTMI
          * 
-         * 
+         *  @arr    : int[]
+         *  @value  : int
+         *  @return : void
          */
         private void Populate(int[] arr, int value)
         {
