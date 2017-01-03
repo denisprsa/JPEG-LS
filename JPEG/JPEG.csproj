@@ -44,8 +44,9 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Bits.cs" />
     <Compile Include="Golomb.cs" />
-    <Compile Include="JPEG.cs" />
+    <Compile Include="JPEGEncode.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

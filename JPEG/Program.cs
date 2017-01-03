@@ -16,7 +16,7 @@ namespace JPEG
                 if (args[0] == "-E" && args.Length == 4)
                 {
                     JPEGEncode jpg = new JPEGEncode();
-                    byte[] encodedData = jpg.Encode(args[2], Convert.ToInt32(args[1].Substring(1, args[1].Length - 1)));
+                    byte[] encodedData = jpg.Encode(args[2], Convert.ToInt32(args[1].Substring(args[1].Length - 1, 1)));
 
                     BinaryWriter write = new BinaryWriter(File.Open(args[3], FileMode.OpenOrCreate));
                     write.Write(encodedData);
@@ -41,7 +41,7 @@ namespace JPEG
                 Console.WriteLine("Check if arguments are set.");
             }
 
-            //Console.ReadKey();
+            Console.ReadKey();
         }
     }
 }

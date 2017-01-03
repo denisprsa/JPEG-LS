@@ -12,29 +12,48 @@ namespace JPEG
          *  KODIRANJE
          * 
          */
-        public byte[] Encode(byte[] data, int M)
+        public void Encode(ref Bits byteManager, int k, int MErrval, int limit, int qbpp)
         {
-            List<byte> _out = new List<byte>();
-            for(int i = 0; i < data.Length; i++)
+            int M = Convert.ToInt32(Math.Pow(2, k));
+            int x = Convert.ToInt32(Math.Floor(Convert.ToDouble(MErrval / M)));
+            int r = Convert.ToInt32(MErrval % M);
+
+            if(x < limit - qbpp - 1)
             {
-                // CALCULATE Q
-                int q = data[i] / M;
+                for (int i = 0; i < x; i++)
+                    byteManager.add(false);
 
-                for (int j = 0; j < q; j++)
-                {
-                    _out.Add(1);
-                }
-                _out.Add(0);
+                byteManager.add(true);
 
-                // CALCULATE V 
-                int v = 1;
-                for (int j = 0; j < Math.Log(M,2); j++)
+                int comp = Convert.ToInt32(Math.Pow(2, k-1));
+                for (int i = k; i > 0; i--)
                 {
-                    _out.Add((byte)(v & data[i]));
-                    v = v << 1;
+                    if ((comp & r) == comp)
+                        byteManager.add(true);
+                    else
+                        byteManager.add(false);
+
+                    r <<= 1;
                 }
             }
-            return _out.ToArray();
+            else
+            {
+                for (int i = 0; i < limit - qbpp - 1; i++)
+                    byteManager.add(false);
+
+                byteManager.add(true);
+
+                MErrval -= 1;
+                for (int i = qbpp; i > 0; i--)
+                {
+                    if ((128 & MErrval) == 128)
+                        byteManager.add(true);
+                    else
+                        byteManager.add(false);
+
+                    MErrval <<= 1;
+                }
+            }
         }
 
 

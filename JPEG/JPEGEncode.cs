@@ -9,6 +9,8 @@ namespace JPEG
 {
     public class JPEGEncode
     {
+        private Bits byteManager = new Bits();
+
         private int NEAR;
         private int MAXVAL;
         private int RANGE;
@@ -35,6 +37,7 @@ namespace JPEG
         private int c;
         private int d;
         private int x;
+        private int gK;
 
         private int[] D;
         private int[] T;
@@ -89,8 +92,8 @@ namespace JPEG
             this.T = new int[] {3, 7, 12};
             this.D = new int[] { 0, 0, 0 };
             this.Q = new int[] { 0, 0, 0 };
-
-            this.GetNextSample();
+            this.width = image.Width;
+            this.height = image.Height;
         }
 
         /**
@@ -104,14 +107,27 @@ namespace JPEG
         {
             this.image = new Bitmap(image);
             this.init(n);
+            this.LD = new byte[16]{
+                1,1,0,0,
+                1,0,0,0,
+                0,1,0,1,
+                1,0,1,1
+            };
+            this.width = 4;
+            this.height = 4;
 
-            while (posX * posY == (width - 1) * (height - 1))
+            while (posX * posY < (width - 1) * (height - 1))
             {
+                Console.WriteLine("pos x " + posX + " pos y " + posY);
                 this.GetNextSample();
                 if (this.D[0] == 0 && this.D[1] == 0 && this.D[2] == 0)
                     this.RunModeProcessing();
                 else
                     this.RegularModeProcessing();
+
+                Console.WriteLine("check bits");
+                byteManager.bits.Clear();
+
             }
 
             return new byte[1];
@@ -124,10 +140,7 @@ namespace JPEG
          */
         private void RunModeProcessing()
         {
-            this.Quantize();
-            this.PredictionPx();
-            this.PredictionCorrect();
-            this.ComputeRx();
+            Console.WriteLine("RunMode");
         }
 
 
@@ -138,7 +151,13 @@ namespace JPEG
          */
         private void RegularModeProcessing()
         {
-
+            Console.WriteLine("RegularMode");
+            this.Quantize();
+            this.PredictionPx();
+            this.PredictionCorrect();
+            int errval = CalculateErrorValue();
+            this.ComputeRx(errval);
+            this.ReductionOfError(errval);
         }
         
         /**
@@ -197,7 +216,7 @@ namespace JPEG
             if (posY == 0)
                 this.d = 0;
             else if (posY > 0 && posX == width - 1)
-                this.d = this.LD[(posY - 1) * width - 1];
+                this.d = this.LD[(posY - 1) * width + posX];
             else
                 this.d = this.LD[((posY - 1) * width) + posX + 1];
 
@@ -286,17 +305,21 @@ namespace JPEG
                 Px = 0;
         }
 
+        private int CalculateErrorValue()
+        {
+            int errval = x - Px;
+            if (SIGN == -1)
+                errval *= -1;
+            return errval;
+        }
 
         /**
          *  COMPUTATION OF PREDICTION ERROR 
          * 
          * 
          */
-        private void ComputeRx()
+        private void ComputeRx(int errval)
         {
-            int errval = x - Px;
-            if (SIGN == -1)
-                errval *= -1;
 
             if(NEAR == 0)
             {
@@ -316,17 +339,51 @@ namespace JPEG
                 else if (Rx > MAXVAL)
                     Rx = MAXVAL;
             }
+            
+        }
 
+        private void ReductionOfError(int errval)
+        {
             if (errval < 0)
                 errval = errval + RANGE;
-            if(errval >= (RANGE + 1) / 2)
+            if (errval >= (RANGE + 1) / 2)
                 errval = errval - RANGE;
 
-            for(int k = 0; (N[contextOfX] << k) < A[contextOfX]; k++)
+            for (int k = 0; (N[contextOfX] << k) < A[contextOfX]; k++)
             {
                 k = (int)(Math.Log(A[contextOfX] / N[contextOfX], 2));
+                gK = k;
             }
         }
+
+        private void ErrorMapping(int errval)
+        {
+            int MErrval = -1;
+            if (NEAR == 0 && errval < 0)
+            {
+                MErrval = -errval;
+            }
+            else
+            {
+                if (NEAR == 0 && gK == 0 && (2 * B[contextOfX] <= -N[contextOfX]))
+                {
+                    if (errval >= 0)
+                        MErrval = 2 * errval + 1;
+                    else
+                        MErrval = -2 * (errval + 1);
+                }
+                else
+                {
+                    if (errval >= 0)
+                        MErrval = 2 * errval + 1;
+                    else
+                        MErrval = -2 * errval - 1;  
+                }
+            }
+
+            
+        }
+
 
         /**
         *  RETURN MAX VALUE BETWEEN TWO VALUES
