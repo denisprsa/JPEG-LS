@@ -14,6 +14,7 @@ namespace JPEG
         private int NEAR;
         private int MAXVAL;
         private int RANGE;
+        private int RESET;
         private int qbpp;
         private int bpp;
         private int LIMIT;
@@ -72,6 +73,7 @@ namespace JPEG
             this.Populate(this.A, 4);
             this.N[365] = 0;
             this.N[366] = 0;
+            this.RESET = 64;
             this.RUNindex = 0;
             this.J = new int[] {
                 0, 0, 0, 0,
@@ -127,7 +129,6 @@ namespace JPEG
 
                 Console.WriteLine("check bits");
                 byteManager.bits.Clear();
-
             }
 
             return new byte[1];
@@ -141,6 +142,7 @@ namespace JPEG
         private void RunModeProcessing()
         {
             Console.WriteLine("RunMode");
+
         }
 
 
@@ -156,8 +158,12 @@ namespace JPEG
             this.PredictionPx();
             this.PredictionCorrect();
             int errval = CalculateErrorValue();
-            this.ComputeRx(errval);
-            this.ReductionOfError(errval);
+            this.ComputeRx(ref errval);
+            this.ReductionOfError(ref errval);
+            int MError = this.ErrorMapping(errval);
+            Golomb GB = new Golomb();
+            GB.Encode(ref byteManager, gK, MError, LIMIT, qbpp);
+            this.UpdateVariables(errval);
         }
         
         /**
@@ -224,6 +230,29 @@ namespace JPEG
         }
 
         /**
+         *  QUANTIZATION OF GRADIENTS
+         * 
+         * 
+         */
+        private void Quantize()
+        {
+            this.GetQuantizationGradients();
+
+            SIGN = 1;
+
+            if (Q[0] < 0 || (Q[0] == 0 && Q[1] < 0) ||
+                (Q[0] == 0 && Q[1] == 0 && Q[2] < 0))
+            {
+                Q[0] *= -1;
+                Q[1] *= -1;
+                Q[2] *= -1;
+                SIGN = -1;
+            }
+
+            contextOfX = 81 * Q[0] + 9 * Q[1] + Q[2];
+        }
+
+        /**
          *  CALCULATE QUANTIZATION GRADIENTS
          * 
          *  
@@ -244,29 +273,7 @@ namespace JPEG
             }
         }
 
-        /**
-         *  QUANTIZATION OF GRADIENTS
-         * 
-         * 
-         */
-        private void Quantize()
-        {
-            this.GetQuantizationGradients();
-
-            SIGN = 1;
-
-            if(Q[0] < 0 || (Q[0] == 0 && Q[1] < 0) ||
-                (Q[0] == 0 && Q[1] == 0 && Q[2] < 0))
-            {
-                Q[0] *= -1;
-                Q[1] *= -1;
-                Q[2] *= -1;
-                SIGN = -1;
-            }
-
-            contextOfX = 81 * Q[0] + 9 * Q[1] + Q[2];
-        }
-
+        
         /**
          *  EDGE-DETECTING PREDICTOR
          * 
@@ -275,9 +282,7 @@ namespace JPEG
         private void PredictionPx()
         {
             if (c >= max(a, b))
-            {
                 Px = min(a, b);
-            }
             else
             {
                 if (c <= min(a, b))
@@ -318,9 +323,8 @@ namespace JPEG
          * 
          * 
          */
-        private void ComputeRx(int errval)
+        private void ComputeRx(ref int errval)
         {
-
             if(NEAR == 0)
             {
                 Rx = x;
@@ -342,7 +346,7 @@ namespace JPEG
             
         }
 
-        private void ReductionOfError(int errval)
+        private void ReductionOfError(ref int errval)
         {
             if (errval < 0)
                 errval = errval + RANGE;
@@ -356,13 +360,11 @@ namespace JPEG
             }
         }
 
-        private void ErrorMapping(int errval)
+        private int ErrorMapping(int errval)
         {
             int MErrval = -1;
             if (NEAR == 0 && errval < 0)
-            {
                 MErrval = -errval;
-            }
             else
             {
                 if (NEAR == 0 && gK == 0 && (2 * B[contextOfX] <= -N[contextOfX]))
@@ -380,11 +382,45 @@ namespace JPEG
                         MErrval = -2 * errval - 1;  
                 }
             }
-
-            
+            return MErrval;
         }
 
+        private void UpdateVariables(int errval)
+        {
+            B[contextOfX] = B[contextOfX] + errval * (2 * NEAR + 1);
+            A[contextOfX] = A[contextOfX] + Math.Abs(errval);
+            if (N[contextOfX] == RESET)
+            {
+                A[contextOfX] = A[contextOfX] >> 1;
+                if (B[contextOfX] >= 0)
+                    B[contextOfX] = B[contextOfX] >> 1;
+                else
+                    B[contextOfX] = -((1 - B[contextOfX]) >> 1);
 
+                N[contextOfX] = N[contextOfX] >> 1;
+            }
+            N[contextOfX] = N[contextOfX] + 1;
+        }
+
+        private void UpdateBiasVariable()
+        {
+            if (B[contextOfX] <= -N[contextOfX])
+            {
+                B[contextOfX] = B[contextOfX] + N[contextOfX];
+                if (C[contextOfX] > C_MIN)
+                    C[contextOfX] = C[contextOfX] - 1;
+                if (B[contextOfX] <= -N[contextOfX])
+                    B[contextOfX] = -N[contextOfX] + 1;
+            }
+            else if (B[contextOfX] > 0)
+            {
+                B[contextOfX] = B[contextOfX] - N[contextOfX];
+                if (C[contextOfX] < C_MAX)
+                    C[contextOfX] = C[contextOfX] + 1;
+                if (B[contextOfX] > 0)
+                    B[contextOfX] = 0;
+            }
+        }
         /**
         *  RETURN MAX VALUE BETWEEN TWO VALUES
         * 
