@@ -18,7 +18,10 @@ namespace JPEG
         private int qbpp;
         private int bpp;
         private int LIMIT;
+        private int RItype;
         private int RUNindex;
+        private int RUNval;
+        private int RUNcnt;
         private int N_MAX;
         private int C_MIN;
         private int C_MAX;
@@ -26,8 +29,10 @@ namespace JPEG
         private int Px;
         private int Rx;
         private int SIGN;
+        private int PrevRUNindex;
 
         private int[] N;
+        private int[] Nn;
         private int[] A;
         private int[] B;
         private int[] C;
@@ -38,7 +43,6 @@ namespace JPEG
         private int c;
         private int d;
         private int x;
-        private int gK;
 
         private int[] D;
         private int[] T;
@@ -52,6 +56,7 @@ namespace JPEG
         private int width;
         private int height;
         private byte[] LD;
+        private bool EOLinteruption;
 
         /**
          *  INIT DATA
@@ -60,21 +65,25 @@ namespace JPEG
          */
         private void init(int near)
         {
+            this.PrevRUNindex = 0;
             this.NEAR = near;
             this.C_MAX = 127;
             this.C_MIN = -128;
             this.N = new int[367];
+            this.Nn = new int[367];
             this.A = new int[367];
             this.B = new int[365];
             this.C = new int[365];
             this.Populate(this.N, 1);
+            this.Populate(this.Nn, 0);
             this.Populate(this.B, 0);
             this.Populate(this.C, 0);
             this.Populate(this.A, 4);
-            this.N[365] = 0;
-            this.N[366] = 0;
+            //this.N[365] = 0;
+            //this.N[366] = 0;
             this.RESET = 64;
             this.RUNindex = 0;
+            this.EOLinteruption = false;
             this.J = new int[] {
                 0, 0, 0, 0,
                 1, 1, 1, 1,
@@ -87,9 +96,9 @@ namespace JPEG
             };
             this.RANGE = 256;
             this.MAXVAL = 255;
-            this.LIMIT = 2 * (bpp + bpp);
             this.qbpp = (int)Math.Log(this.RANGE, 2);
             this.bpp = 8;
+            this.LIMIT = 2 * (bpp + bpp);
             this.SIGN = 0;
             this.T = new int[] {3, 7, 12};
             this.D = new int[] { 0, 0, 0 };
@@ -110,28 +119,39 @@ namespace JPEG
             this.image = new Bitmap(image);
             this.init(n);
             this.LD = new byte[16]{
-                1,1,0,0,
-                1,0,0,0,
-                0,1,0,1,
-                1,0,1,1
+                0,0,90,74,
+                68,50,43,205,
+                64,145,145,145,
+                100,145,145,145
             };
             this.width = 4;
             this.height = 4;
 
             while (posX * posY < (width - 1) * (height - 1))
             {
-                Console.WriteLine("pos x " + posX + " pos y " + posY);
                 this.GetNextSample();
+
+                Console.WriteLine("0: " + D[0] + " 1: " + D[1] + " 2: " + D[2]);
+                Console.WriteLine("a: " + a + " b: " + b + " c: " + c + " d: " + d + " x: " + x);
                 if (this.D[0] == 0 && this.D[1] == 0 && this.D[2] == 0)
                     this.RunModeProcessing();
                 else
                     this.RegularModeProcessing();
 
-                Console.WriteLine("check bits");
+                PrintBits();
+                Console.WriteLine();
                 byteManager.bits.Clear();
             }
 
             return new byte[1];
+        }
+
+        private void PrintBits()
+        {
+            foreach (var i in byteManager.bits)
+            {
+                Console.Write(i ? "1" : "0");
+            }
         }
 
         /**
@@ -142,8 +162,182 @@ namespace JPEG
         private void RunModeProcessing()
         {
             Console.WriteLine("RunMode");
+            RunLengthDetermination();
+            EncodeRunLengthSegment();
+            EncodeInteruptedValue();
 
         }
+
+        private void RunLengthDetermination()
+        {
+            RUNval = this.a;
+            RUNcnt = 0;
+            bool endLine = false;
+            while (Math.Abs(this.x - RUNval) <= NEAR)
+            {
+                RUNcnt = RUNcnt + 1; Rx = RUNval;
+                if (endLine)
+                {
+                    break;
+                }
+                else
+                {
+                    endLine = GetNextSample();
+                }
+            }
+        }
+
+        /**
+         *  The variable RUNcnt computed following the procedure 
+         *  in Code segment A.14 represents the run length.
+         * 
+         * 
+         */
+        private void EncodeRunLengthSegment()
+        {
+            // A.15
+            while (RUNcnt >= (1 << J[RUNindex]))
+            {
+                byteManager.add(true);
+                RUNcnt = RUNcnt - (1 << J[RUNindex]);
+                if (RUNindex < 31)
+                    RUNindex = RUNindex + 1;
+            }
+
+            // A.16
+            this.PrevRUNindex = RUNindex;
+            this.EOLinteruption = false;
+            if (Math.Abs(this.x - RUNval) > NEAR)
+            {
+                this.EOLinteruption = true;
+                byteManager.add(false);
+                for (int i = J[RUNindex]; i > 0; i--)
+                {
+                    if ((RUNcnt & J[RUNindex]) == 1)
+                        byteManager.add(true);
+                    else
+                        byteManager.add(false);
+
+                    RUNcnt <<= 1;
+                }
+                if (RUNindex > 0)
+                    RUNindex = RUNindex - 1;
+            }
+            else if (RUNcnt > 0)
+                byteManager.add(true);
+        }
+
+
+        /**
+         * 
+         * 
+         * 
+         */
+        private void EncodeInteruptedValue()
+        {
+            IndexComuptation();
+            int Errval = PredictionErrorRunInteruption();
+            Errval = ErrorCumpotationForRunInterruption(Errval);
+
+            int TEMP = 0;
+            if (RItype == 0)
+                TEMP = A[365];
+            else
+                TEMP = A[366] + (N[366] >> 1);
+
+            contextOfX = RItype + 365;
+
+            int k = 0;
+            for (k = 0; (N[contextOfX] << k) < TEMP; k++) ;
+
+            //
+            int map = 0;
+            if ((k == 0) && (Errval > 0) && (2 * Nn[contextOfX] < N[contextOfX]))
+                map = 1;
+            else if ((Errval < 0) && (2 * Nn[contextOfX] >= N[contextOfX]))
+                map = 1;
+            else if ((Errval < 0) && (k != 0))
+                map = 1;
+            else
+                map = 0;
+            
+            //
+            int EMErrval = 2 * Math.Abs(Errval) - RItype - map;
+
+            if (EOLinteruption)
+            {
+                Golomb GB = new Golomb();
+                GB.Encode(ref byteManager, k, EMErrval, (LIMIT - J[PrevRUNindex] - 1), qbpp);
+            }
+
+            //
+            if (Errval < 0)
+                Nn[contextOfX] = Nn[contextOfX] + 1;
+
+            A[contextOfX] = A[contextOfX] + ((EMErrval + 1 - RItype) >> 1);
+            
+            if (N[contextOfX] == RESET)
+            {
+                A[contextOfX] = A[contextOfX] >> 1;
+                N[contextOfX] = N[contextOfX] >> 1;
+                Nn[contextOfX] = Nn[contextOfX] >> 1;
+            }
+
+            N[contextOfX] = N[contextOfX] + 1;
+        }
+
+        /**
+         * 
+         */
+        private void IndexComuptation()
+        {
+            if (Math.Abs(a - b) <= NEAR)
+                RItype = 1;
+            else
+                RItype = 0;
+        }
+
+
+        /**
+         * 
+         * 
+         */
+        private int PredictionErrorRunInteruption()
+        {
+            if (RItype == 1)
+                Px = this.a;
+            else
+                Px = this.b;
+            return x - Px;
+        }
+
+        /**
+         * 
+         * 
+         */
+        private int ErrorCumpotationForRunInterruption(int Errval)
+        {
+            if (RItype == 0 && a > b)
+            {
+                Errval = -Errval;
+                SIGN = -1;
+            }
+            else
+                SIGN = 1;
+
+            if (NEAR > 0)
+            {
+                //Errval = Quantize();
+                //x = ComputeX();
+            }
+            else
+                Rx = x;
+
+            ReductionOfError(ref Errval);
+
+            return Errval;
+        }
+
 
 
         /**
@@ -160,9 +354,13 @@ namespace JPEG
             int errval = CalculateErrorValue();
             this.ComputeRx(ref errval);
             this.ReductionOfError(ref errval);
-            int MError = this.ErrorMapping(errval);
+
+            int k = 0;
+            for (k = 0; (N[contextOfX] << k) < A[contextOfX]; k++);
+
+            int MError = this.ErrorMapping(errval, k);
             Golomb GB = new Golomb();
-            GB.Encode(ref byteManager, gK, MError, LIMIT, qbpp);
+            GB.Encode(ref byteManager, k, MError, LIMIT, qbpp);
             this.UpdateVariables(errval);
         }
         
@@ -171,7 +369,7 @@ namespace JPEG
          * 
          *
          */
-        private void GetNextSample()
+        private bool GetNextSample()
         {
             this.SetVariablesABCD();
             this.D[0] = this.d - this.b;
@@ -184,7 +382,9 @@ namespace JPEG
             {
                 posX = 0;
                 posY += 1;
+                return true;
             }
+            return false;
         }
 
         /**
@@ -300,7 +500,7 @@ namespace JPEG
         private void PredictionCorrect()
         {
             if (SIGN == 1)
-                Px = Px - C[contextOfX];
+                Px = Px + C[contextOfX];
             else
                 Px = Px - C[contextOfX];
 
@@ -314,7 +514,7 @@ namespace JPEG
         {
             int errval = x - Px;
             if (SIGN == -1)
-                errval *= -1;
+                errval = -errval;
             return errval;
         }
 
@@ -352,15 +552,9 @@ namespace JPEG
                 errval = errval + RANGE;
             if (errval >= (RANGE + 1) / 2)
                 errval = errval - RANGE;
-
-            for (int k = 0; (N[contextOfX] << k) < A[contextOfX]; k++)
-            {
-                k = (int)(Math.Log(A[contextOfX] / N[contextOfX], 2));
-                gK = k;
-            }
         }
 
-        private int ErrorMapping(int errval)
+        private int ErrorMapping(int errval, int gK)
         {
             int MErrval = -1;
             if (NEAR == 0 && errval < 0)
@@ -377,7 +571,7 @@ namespace JPEG
                 else
                 {
                     if (errval >= 0)
-                        MErrval = 2 * errval + 1;
+                        MErrval = 2 * errval;
                     else
                         MErrval = -2 * errval - 1;  
                 }

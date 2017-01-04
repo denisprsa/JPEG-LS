@@ -16,7 +16,7 @@ namespace JPEG
         {
             int M = Convert.ToInt32(Math.Pow(2, k));
             int x = Convert.ToInt32(Math.Floor(Convert.ToDouble(MErrval / M)));
-            int r = Convert.ToInt32(MErrval % M);
+            int r = MErrval % M;
 
             if(x < limit - qbpp - 1)
             {
