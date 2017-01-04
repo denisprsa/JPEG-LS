@@ -56,7 +56,7 @@ namespace JPEG
         private int width;
         private int height;
         private byte[] LD;
-        private bool EOLinteruption;
+        private bool SIGNinterupt;
 
         /**
          *  INIT DATA
@@ -69,6 +69,13 @@ namespace JPEG
             this.NEAR = near;
             this.C_MAX = 127;
             this.C_MIN = -128;
+            this.MAXVAL = 255;
+            this.bpp = Convert.ToInt32(Math.Max(2, Math.Ceiling(Math.Log(MAXVAL + 1, 2)))); ;
+            this.LIMIT = 2 * (bpp + Math.Max(8, bpp));
+            this.SIGN = 1;
+            this.RANGE = Math.Abs((MAXVAL + 2 * NEAR) / (2 * NEAR + 1)) + 1;
+            this.qbpp = (int)Math.Log(this.RANGE, 2);
+
             this.N = new int[367];
             this.Nn = new int[367];
             this.A = new int[367];
@@ -78,12 +85,12 @@ namespace JPEG
             this.Populate(this.Nn, 0);
             this.Populate(this.B, 0);
             this.Populate(this.C, 0);
-            this.Populate(this.A, 4);
+            this.Populate(this.A, Math.Max(2, (RANGE + 32) / 64));
             //this.N[365] = 0;
             //this.N[366] = 0;
             this.RESET = 64;
             this.RUNindex = 0;
-            this.EOLinteruption = false;
+            this.SIGNinterupt = false;
             this.J = new int[] {
                 0, 0, 0, 0,
                 1, 1, 1, 1,
@@ -94,12 +101,7 @@ namespace JPEG
                 8, 9, 10, 11,
                 12, 13, 14, 15
             };
-            this.RANGE = 256;
-            this.MAXVAL = 255;
-            this.qbpp = (int)Math.Log(this.RANGE, 2);
-            this.bpp = 8;
-            this.LIMIT = 2 * (bpp + bpp);
-            this.SIGN = 0;
+            
             this.T = new int[] {3, 7, 21};
             this.D = new int[] { 0, 0, 0 };
             this.Q = new int[] { 0, 0, 0 };
@@ -118,37 +120,47 @@ namespace JPEG
         {
             this.image = new Bitmap(image);
             this.init(n);
-            this.LD = new byte[16]{
-                0,0,90,74,
-                68,50,43,205,
-                64,145,145,145,
-                100,145,145,145
-            };
+
+            //Testing
+            this.LD = TestEncoding.Input8();
+            string[] bitsE = TestEncoding.Result8();
+            int bitLine = 0;
+
             this.width = 4;
             this.height = 4;
 
             while ( (posX+1) * (posY+1) < (width) * (height) )
             {
                 //Console.WriteLine("posY " + posY + " posX " + posX);
+
                 this.GetNextSample();
-                
+
                 //Console.WriteLine("0: " + D[0] + " 1: " + D[1] + " 2: " + D[2]);
                 //Console.WriteLine("c: " + c + " b: " + b + " d: " + d);
                 //Console.WriteLine("a: " + a + " x: " + x);
-                if (this.D[0] == 0 && this.D[1] == 0 && this.D[2] == 0)
+
+                if (Math.Abs(this.D[0]) <= NEAR &&
+                    Math.Abs(this.D[1]) <= NEAR &&
+                    Math.Abs(this.D[2]) <= NEAR)
                     this.RunModeProcessing();
                 else
                     this.RegularModeProcessing();
 
-                PrintBits();
-                Console.WriteLine();
+                // Testing
+                string bitsS = PrintBits();
+                if (bitsS != bitsE[bitLine])
+                {
+                    Console.WriteLine("ERROR");
+                    Console.WriteLine(bitsS + " " + bitsE[bitLine]);
+                }
+                
                 byteManager.bits.Clear();
                 if (posY + 1 > height)
-                {
-                    Console.WriteLine("FINISH");
                     break;
-                }
+
+                bitLine++;
             }
+            Console.WriteLine("FINISH");
 
             return new byte[1];
         }
@@ -157,7 +169,7 @@ namespace JPEG
         /**
          *  GET NEXT SAMPLE OF IMAGE
          * 
-         *
+         *  @RETURN : true if end of line
          */
         private bool GetNextSample()
         {
@@ -165,27 +177,22 @@ namespace JPEG
             this.D[0] = this.d - this.b;
             this.D[1] = this.b - this.c;
             this.D[2] = this.c - this.a;
-
+            
             posX += 1;
+
+            
 
             if (posX == width)
             {
                 posX = 0;
                 posY += 1;
-                return true;
             }
             return false;
-        }
-
-
-        private void Test()
-        {
-
         }
         
 
         /**
-         * 
+         *  SET Ra, Rb, Rc, Rd, Rx
          * 
          * 
          */
@@ -227,12 +234,16 @@ namespace JPEG
         }
 
 
-        private void PrintBits()
+        private string PrintBits()
         {
+            string result = "";
             foreach (var i in byteManager.bits)
             {
+                result += i ? "1" : "0";
                 Console.Write(i ? "1" : "0");
             }
+            Console.WriteLine();
+            return result;
         }
 
         /**
@@ -256,11 +267,10 @@ namespace JPEG
             {
                 RUNcnt = RUNcnt + 1;
                 Rx = RUNval;
-                if (endLine)
+                if (posX == 0)
                     break;
                 else
-                    endLine = GetNextSample();
-
+                    GetNextSample();
             }
         }
 
@@ -283,10 +293,10 @@ namespace JPEG
 
             // A.16
             this.PrevRUNindex = RUNindex;
-            this.EOLinteruption = false;
+            this.SIGNinterupt = false;
             if (Math.Abs(this.x - RUNval) > NEAR)
             {
-                this.EOLinteruption = true;
+                SIGNinterupt = true;
                 byteManager.add(false);
                 for (int i = J[RUNindex]; i > 0; i--)
                 {
@@ -341,7 +351,7 @@ namespace JPEG
             //
             int EMErrval = 2 * Math.Abs(Errval) - RItype - map;
 
-            if (!EOLinteruption)
+            if (!SIGNinterupt)
                 return;
 
             Golomb GB = new Golomb();
@@ -452,11 +462,9 @@ namespace JPEG
 
             SIGN = 1;
 
-            if (
-                Q[0] < 0 ||
+            if (Q[0] < 0 ||
                 (Q[0] == 0 && Q[1] < 0) ||
-                (Q[0] == 0 && Q[1] == 0 && Q[2] < 0)
-                )
+                (Q[0] == 0 && Q[1] == 0 && Q[2] < 0))
             {
                 Q[0] = -Q[0];
                 Q[1] = -Q[1];
@@ -624,6 +632,7 @@ namespace JPEG
                     B[contextOfX] = 0;
             }
         }
+
         /**
         *  RETURN MAX VALUE BETWEEN TWO VALUES
         * 
@@ -655,6 +664,7 @@ namespace JPEG
          *  @value  : int
          *  @return : void
          */
+        
         private void Populate(int[] arr, int value)
         {
             for (int i = 0; i < arr.Length; i++)
