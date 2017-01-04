@@ -100,7 +100,7 @@ namespace JPEG
             this.bpp = 8;
             this.LIMIT = 2 * (bpp + bpp);
             this.SIGN = 0;
-            this.T = new int[] {3, 7, 12};
+            this.T = new int[] {3, 7, 21};
             this.D = new int[] { 0, 0, 0 };
             this.Q = new int[] { 0, 0, 0 };
             this.width = image.Width;
@@ -127,12 +127,14 @@ namespace JPEG
             this.width = 4;
             this.height = 4;
 
-            while (posX * posY < (width - 1) * (height - 1))
+            while ( (posX+1) * (posY+1) < (width) * (height) )
             {
+                //Console.WriteLine("posY " + posY + " posX " + posX);
                 this.GetNextSample();
-
-                Console.WriteLine("0: " + D[0] + " 1: " + D[1] + " 2: " + D[2]);
-                Console.WriteLine("a: " + a + " b: " + b + " c: " + c + " d: " + d + " x: " + x);
+                
+                //Console.WriteLine("0: " + D[0] + " 1: " + D[1] + " 2: " + D[2]);
+                //Console.WriteLine("c: " + c + " b: " + b + " d: " + d);
+                //Console.WriteLine("a: " + a + " x: " + x);
                 if (this.D[0] == 0 && this.D[1] == 0 && this.D[2] == 0)
                     this.RunModeProcessing();
                 else
@@ -141,10 +143,89 @@ namespace JPEG
                 PrintBits();
                 Console.WriteLine();
                 byteManager.bits.Clear();
+                if (posY + 1 > height)
+                {
+                    Console.WriteLine("FINISH");
+                    break;
+                }
             }
 
             return new byte[1];
         }
+
+
+        /**
+         *  GET NEXT SAMPLE OF IMAGE
+         * 
+         *
+         */
+        private bool GetNextSample()
+        {
+            this.SetVariablesABCD();
+            this.D[0] = this.d - this.b;
+            this.D[1] = this.b - this.c;
+            this.D[2] = this.c - this.a;
+
+            posX += 1;
+
+            if (posX == width)
+            {
+                posX = 0;
+                posY += 1;
+                return true;
+            }
+            return false;
+        }
+
+
+        private void Test()
+        {
+
+        }
+        
+
+        /**
+         * 
+         * 
+         * 
+         */
+        private void SetVariablesABCD()
+        {
+            // SET a
+            if (posX == 0 && posY == 0)
+                this.a = 0;
+            else if (posY > 0 && posX == 0)
+                this.a = this.LD[(posY - 1) * width];
+            else if (posY == 0 && posX > 0)
+                this.a = this.LD[posX - 1];
+            else
+                this.a = this.LD[((posY) * width) + posX - 1];
+
+            // SET b
+            if (posY == 0)
+                this.b = 0;
+            else
+                this.b = this.LD[((posY - 1) * width) + posX];
+
+            // SET c
+            if (posY == 0 || (posY == 1 && posX == 0))
+                this.c = 0;
+            else if (posY > 1 && posX == 0)
+                this.c = this.LD[(posY - 2) * width];
+            else
+                this.c = this.LD[((posY - 1) * width) + posX - 1];
+
+            // SET d
+            if (posY == 0)
+                this.d = 0;
+            else if (posY > 0 && posX == width - 1)
+                this.d = this.LD[(posY - 1) * width + posX];
+            else
+                this.d = this.LD[((posY - 1) * width) + posX + 1];
+
+            this.x = this.LD[(posY) * width + posX];
+        }
+
 
         private void PrintBits()
         {
@@ -161,11 +242,9 @@ namespace JPEG
          */
         private void RunModeProcessing()
         {
-            Console.WriteLine("RunMode");
             RunLengthDetermination();
             EncodeRunLengthSegment();
             EncodeInteruptedValue();
-
         }
 
         private void RunLengthDetermination()
@@ -175,15 +254,13 @@ namespace JPEG
             bool endLine = false;
             while (Math.Abs(this.x - RUNval) <= NEAR)
             {
-                RUNcnt = RUNcnt + 1; Rx = RUNval;
+                RUNcnt = RUNcnt + 1;
+                Rx = RUNval;
                 if (endLine)
-                {
                     break;
-                }
                 else
-                {
                     endLine = GetNextSample();
-                }
+
             }
         }
 
@@ -264,11 +341,11 @@ namespace JPEG
             //
             int EMErrval = 2 * Math.Abs(Errval) - RItype - map;
 
-            if (EOLinteruption)
-            {
-                Golomb GB = new Golomb();
-                GB.Encode(ref byteManager, k, EMErrval, (LIMIT - J[PrevRUNindex] - 1), qbpp);
-            }
+            if (!EOLinteruption)
+                return;
+
+            Golomb GB = new Golomb();
+            GB.Encode(ref byteManager, k, EMErrval, (LIMIT - J[PrevRUNindex] - 1), qbpp);
 
             //
             if (Errval < 0)
@@ -347,7 +424,6 @@ namespace JPEG
          */
         private void RegularModeProcessing()
         {
-            Console.WriteLine("RegularMode");
             this.Quantize();
             this.PredictionPx();
             this.PredictionCorrect();
@@ -362,71 +438,7 @@ namespace JPEG
             Golomb GB = new Golomb();
             GB.Encode(ref byteManager, k, MError, LIMIT, qbpp);
             this.UpdateVariables(errval);
-        }
-        
-        /**
-         *  GET NEXT SAMPLE OF IMAGE
-         * 
-         *
-         */
-        private bool GetNextSample()
-        {
-            this.SetVariablesABCD();
-            this.D[0] = this.d - this.b;
-            this.D[1] = this.b - this.c;
-            this.D[2] = this.c - this.a;
-
-            posX += 1;
-
-            if (posX == width)
-            {
-                posX = 0;
-                posY += 1;
-                return true;
-            }
-            return false;
-        }
-
-        /**
-         * 
-         * 
-         * 
-         */
-        private void SetVariablesABCD()
-        {
-            // SET a
-            if (posX == 0 && posY == 0)
-                this.a = 0;
-            else if (posY > 0 && posX == 0)
-                this.a = this.LD[(posY - 1) * width];
-            else if (posY == 0 && posX > 0)
-                this.a = this.LD[posX - 1];
-            else
-                this.a = this.LD[((posY - 1) * width) + posX - 1];
-
-            // SET b
-            if (posY == 0)
-                this.b = 0;
-            else
-                this.b = this.LD[((posY - 1) * width) + posX];
-
-            // SET c
-            if (posY == 0 || (posY == 1 && posX == 0))
-                this.c = 0;
-            else if (posY > 1 && posX == 0)
-                this.c = this.LD[(posY - 2) * width];
-            else
-                this.c = this.LD[((posY - 1) * width) + posX - 1];
-
-            // SET d
-            if (posY == 0)
-                this.d = 0;
-            else if (posY > 0 && posX == width - 1)
-                this.d = this.LD[(posY - 1) * width + posX];
-            else
-                this.d = this.LD[((posY - 1) * width) + posX + 1];
-
-            this.x = this.LD[(posY) * width + posX];
+            this.UpdateBiasVariable();
         }
 
         /**
@@ -440,12 +452,15 @@ namespace JPEG
 
             SIGN = 1;
 
-            if (Q[0] < 0 || (Q[0] == 0 && Q[1] < 0) ||
-                (Q[0] == 0 && Q[1] == 0 && Q[2] < 0))
+            if (
+                Q[0] < 0 ||
+                (Q[0] == 0 && Q[1] < 0) ||
+                (Q[0] == 0 && Q[1] == 0 && Q[2] < 0)
+                )
             {
-                Q[0] *= -1;
-                Q[1] *= -1;
-                Q[2] *= -1;
+                Q[0] = -Q[0];
+                Q[1] = -Q[1];
+                Q[2] = -Q[2];
                 SIGN = -1;
             }
 
@@ -526,9 +541,7 @@ namespace JPEG
         private void ComputeRx(ref int errval)
         {
             if(NEAR == 0)
-            {
                 Rx = x;
-            }
             else
             {
                 if (errval > 0)
@@ -557,24 +570,20 @@ namespace JPEG
         private int ErrorMapping(int errval, int gK)
         {
             int MErrval = -1;
-            if (NEAR == 0 && errval < 0)
-                MErrval = -errval;
+
+            if (NEAR == 0 && gK == 0 && (2 * B[contextOfX] <= -N[contextOfX]))
+            {
+                if (errval >= 0)
+                    MErrval = 2 * errval + 1;
+                else
+                    MErrval = -2 * (errval + 1);
+            }
             else
             {
-                if (NEAR == 0 && gK == 0 && (2 * B[contextOfX] <= -N[contextOfX]))
-                {
-                    if (errval >= 0)
-                        MErrval = 2 * errval + 1;
-                    else
-                        MErrval = -2 * (errval + 1);
-                }
+                if (errval >= 0)
+                    MErrval = 2 * errval;
                 else
-                {
-                    if (errval >= 0)
-                        MErrval = 2 * errval;
-                    else
-                        MErrval = -2 * errval - 1;  
-                }
+                    MErrval = -2 * errval - 1;  
             }
             return MErrval;
         }
